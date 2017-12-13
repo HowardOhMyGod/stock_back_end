@@ -1,7 +1,7 @@
 
 # coding: utf-8
 '''
-功能: 把當日個股股價資料抓取並存進資料庫
+功能: 把當日上市個股股價資料抓取並存進資料庫
 資料來源: http://www.twse.com.tw/exchangeReport/STOCK_DAY_ALL
 
 資料庫schema: {
