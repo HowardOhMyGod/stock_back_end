@@ -81,10 +81,17 @@ def updateMA(code):
     for this_day in this_stock_history[-20:]:
         all_close.append(this_day['close'])
 
+    # append latest 5 days volumn
+    all_volumn = []
+    for this_day in this_stock_history[-5:]:
+        all_volumn.append(this_day['volumn'])
+
 
     new_5MA = ts_stock.moving_average(all_close[-5:], 5)
     new_10MA = ts_stock.moving_average(all_close[-10:], 10)
     new_20MA = ts_stock.moving_average(all_close[-20:], 20)
+
+    vol_5_ma = ts_stock.moving_average(all_volumn, 5)
 
     if len(new_5MA) > 0:
         new_5MA = new_5MA[0]
@@ -103,6 +110,13 @@ def updateMA(code):
         stockCollec.update({'code': code}, {'$push': {
             'MA.MA_20': new_20MA,
         }})
+
+    if len(vol_5_ma) == 1:
+        vol_5_ma = vol_5_ma[0]
+        stockCollec.update({'code': code}, {'$push': {
+            'volumn_5_ma': vol_5_ma
+        }})
+
 
 # request and get stock price data, store in price_obj
 res = requests.get(url)

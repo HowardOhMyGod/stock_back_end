@@ -101,10 +101,17 @@ def updateMA(code):
     for this_day in this_stock_history[-20:]:
         all_close.append(this_day['close'])
 
+    # append latest 5 days volumn
+    all_volumn = []
+    for this_day in this_stock_history[-5:]:
+        all_volumn.append(this_day['volumn'])
+
     # compute MA
     new_5MA = ts_stock.moving_average(all_close[-5:], 5)
     new_10MA = ts_stock.moving_average(all_close[-10:], 10)
     new_20MA = ts_stock.moving_average(all_close[-20:], 20)
+
+    vol_5_ma = ts_stock.moving_average(all_volumn, 5)
 
     # 檢查該股是否有足夠天數計算MA，如果沒有上面回傳的List會是空值，就不跟新MA list
     if len(new_5MA) > 0:
@@ -123,6 +130,12 @@ def updateMA(code):
         new_20MA = new_20MA[0]
         priceCollect.update({'code': code}, {'$push': {
             'MA.MA_20': new_20MA,
+        }})
+
+    if len(vol_5_ma) == 1:
+        vol_5_ma = vol_5_ma[0]
+        priceCollect.update({'code': code}, {'$push': {
+            'volumn_5_ma': vol_5_ma
         }})
 
 total = 0
