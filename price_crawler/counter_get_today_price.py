@@ -49,13 +49,9 @@ class DateError(Exception):
     pass
 
 class CounterCrawler:
-    def __init__(self, db_link = 'mongodb://localhost:27017/'):
-        # db config stuff, and check if it's cloud db
-        if '.com' in db_link:
-            client = MongoClient(db_link)
-            db = client.get_database()
-        else:
-            db = MongoClient(db_link)['Stock']
+    def __init__(self, db_link = os.environ['local_db']):
+
+        db = MongoClient(db_link)['Stock']
 
         # get code and price collection
         self.codeCollect = db['code']
@@ -65,8 +61,8 @@ class CounterCrawler:
         latest_save_date = self.priceCollect.find_one({'code': '1258'})['history'][-1]['date']
 
         # if saved, raise Error
-        if latest_save_date == datetime.strptime(time.strftime(time_format), time_format):
-            raise DateError(f"{latest_save_date}'s data has been saved!")
+        # if latest_save_date == datetime.strptime(time.strftime(time_format), time_format):
+        #     raise DateError(f"{latest_save_date}'s data has been saved!")
 
         # 取得所有已存在DB的上櫃公司代碼
         self.all_code = self.codeCollect.find_one({})['counterCode']
@@ -166,7 +162,7 @@ class CounterCrawler:
         for code in self.all_code:
             url = f'http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=106/12&stkno={code}&_=1513094300431'
             res = requests.get(url)
-            # print(code)
+            print(code)
 
             # 取得所有股票資料陣列
             monthPrice = json.loads(res.text)['aaData']
@@ -199,7 +195,7 @@ class CounterCrawler:
                 # 新增該股的document並寫入
                 thisStock = {'code': code, 'history': [a_day_price]}
                 self.priceCollect.insert_one(thisStock)
-
+            print('insert!')
             total += 1
 
         print(f'Total update: {total}')

@@ -2,6 +2,7 @@
 # coding: utf-8
 
 from pymongo import MongoClient
+import os
 
 '''
 功能: 檢查該股當日交易資料是否符合均線糾結，向上突破的特徵
@@ -122,10 +123,11 @@ lost_company: list of stock code (有缺少資料之股票代碼)
 '''
 
 class CheckStarter:
-    def __init__(self, options = None, db_link = 'mongodb://localhost:27017/'):
+    def __init__(self, options = None):
         self.pass_company = []
         self.lost_company = []
 
+        db_link = os.environ['local_db']
         # get price collections
         priceCollect = MongoClient(db_link)['Stock']['price']
 

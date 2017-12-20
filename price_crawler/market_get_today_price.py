@@ -56,13 +56,9 @@ class DateError(Exception):
     pass
 
 class MarketCrawler:
-    def __init__(self, db_link = 'mongodb://localhost:27017/'):
-        # db config stuff, and check if it's cloud db
-        if '.com' in db_link:
-            client = MongoClient(db_link)
-            db = client.get_database()
-        else:
-            db = MongoClient(db_link)['Stock']
+    def __init__(self, db_link = os.environ['local_db']):
+
+        db = MongoClient(db_link)['Stock']
 
         # get code and price collection
         self.stockCollec = db['price']
