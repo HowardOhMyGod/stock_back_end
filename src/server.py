@@ -16,6 +16,7 @@ parser.add_argument("up_size", type=float)
 parser.add_argument("sticky_days", type=int)
 parser.add_argument("volumn_big", type=float)
 parser.add_argument("volumn_size", type=int)
+parser.add_argument("risk_level", type=str)
 
 
 # set breakcheck route

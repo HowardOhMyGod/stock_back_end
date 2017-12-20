@@ -39,6 +39,7 @@ import json
 import re
 import copy
 import twstock as ts
+import os
 
 # in order to use move_average method
 ts_stock = ts.Stock('2330')
@@ -50,112 +51,135 @@ pp = pprint.PrettyPrinter(indent = 4)
 url = 'http://www.twse.com.tw/exchangeReport/STOCK_DAY_ALL'
 time_format = "%Y%m%d"
 
+# DateError when data has been saved
+class DateError(Exception):
+    pass
 
-# db config
-db = MongoClient()['Stock']
-stockCollec = db['price']
-codeCollect = db['code']
+class MarketCrawler:
+    def __init__(self, db_link = 'mongodb://localhost:27017/'):
+        # db config stuff, and check if it's cloud db
+        if '.com' in db_link:
+            client = MongoClient(db_link)
+            db = client.get_database()
+        else:
+            db = MongoClient(db_link)['Stock']
 
-# check if stock already in DB
-def isStockInDB(code):
-    return stockCollec.find({'code': code}).count() > 0
+        # get code and price collection
+        self.stockCollec = db['price']
+        self.codeCollect = db['code']
 
-# parsing price from json
-def pack_price(stock):
-    return {
-        'date': datetime.strptime(today, time_format),
-        'open': float(re.sub(',', '', stock[4])),
-        'high': float(re.sub(',', '', stock[5])),
-        'low': float(re.sub(',', '', stock[6])),
-        'close': float(re.sub(',', '', stock[7])),
-        'volumn': float(re.sub(',', '', stock[2])) // 1000
-    }
+        # check if today's data has been saved
+        latest_save_date = self.stockCollec.find_one()['history'][-1]['date']
 
-def updateMA(code):
+        # if saved, raise Error
+        if latest_save_date == datetime.strptime(time.strftime(time_format), time_format):
+            raise DateError(f"{latest_save_date}'s data has been saved!")
 
-    # get the latest 20 days history price
-    this_stock_history = stockCollec.find_one({'code': code})['history']
+    # check if stock already in DB
+    def isStockInDB(self, code):
+        return self.stockCollec.find({'code': code}).count() > 0
 
-    # append latest 20 days closing price
-    all_close = []
-    for this_day in this_stock_history[-20:]:
-        all_close.append(this_day['close'])
+    # parsing price from json
+    def pack_price(self, stock, this_date):
+        return {
+            'date': datetime.strptime(this_date, time_format),
+            'open': float(re.sub(',', '', stock[4])),
+            'high': float(re.sub(',', '', stock[5])),
+            'low': float(re.sub(',', '', stock[6])),
+            'close': float(re.sub(',', '', stock[7])),
+            'volumn': float(re.sub(',', '', stock[2])) // 1000
+        }
 
-    # append latest 5 days volumn
-    all_volumn = []
-    for this_day in this_stock_history[-5:]:
-        all_volumn.append(this_day['volumn'])
+    def updateMA(self, code):
 
+        # get the latest 20 days history price
+        this_stock_history = self.stockCollec.find_one({'code': code})['history']
 
-    new_5MA = ts_stock.moving_average(all_close[-5:], 5)
-    new_10MA = ts_stock.moving_average(all_close[-10:], 10)
-    new_20MA = ts_stock.moving_average(all_close[-20:], 20)
+        # append latest 20 days closing price
+        all_close = []
+        for this_day in this_stock_history[-20:]:
+            all_close.append(this_day['close'])
 
-    vol_5_ma = ts_stock.moving_average(all_volumn, 5)
-
-    if len(new_5MA) > 0:
-        new_5MA = new_5MA[0]
-        stockCollec.update({'code': code}, {'$push': {
-            'MA.MA_5': new_5MA,
-        }})
-
-    if len(new_10MA) > 0:
-        new_10MA = new_10MA[0]
-        stockCollec.update({'code': code}, {'$push': {
-            'MA.MA_10': new_10MA,
-        }})
-
-    if len(new_20MA) > 0:
-        new_20MA = new_20MA[0]
-        stockCollec.update({'code': code}, {'$push': {
-            'MA.MA_20': new_20MA,
-        }})
-
-    if len(vol_5_ma) == 1:
-        vol_5_ma = vol_5_ma[0]
-        stockCollec.update({'code': code}, {'$push': {
-            'volumn_5_ma': vol_5_ma
-        }})
+        # append latest 5 days volumn
+        all_volumn = []
+        for this_day in this_stock_history[-5:]:
+            all_volumn.append(this_day['volumn'])
 
 
-# request and get stock price data, store in price_obj
-res = requests.get(url)
-dayObj = json.loads(res.text)
-today = dayObj['date']
-price_obj = dayObj['data']
+        new_5MA = ts_stock.moving_average(all_close[-5:], 5)
+        new_10MA = ts_stock.moving_average(all_close[-10:], 10)
+        new_20MA = ts_stock.moving_average(all_close[-20:], 20)
 
-# pp.pprint(price_obj)
+        vol_5_ma = ts_stock.moving_average(all_volumn, 5)
 
-# get all market code from DB
-market_code = codeCollect.find_one({})['marketCode']
+        if len(new_5MA) > 0:
+            new_5MA = new_5MA[0]
+            self.stockCollec.update({'code': code}, {'$push': {
+                'MA.MA_5': new_5MA,
+            }})
 
-# total stock update
-total = 0
+        if len(new_10MA) > 0:
+            new_10MA = new_10MA[0]
+            self.stockCollec.update({'code': code}, {'$push': {
+                'MA.MA_10': new_10MA,
+            }})
 
-# loop through all stock price today and save to DB
-for i, stock in enumerate(price_obj):
-    code = stock[0].rstrip()
+        if len(new_20MA) > 0:
+            new_20MA = new_20MA[0]
+            self.stockCollec.update({'code': code}, {'$push': {
+                'MA.MA_20': new_20MA,
+            }})
 
-    # exclude ETF
-    if code not in market_code: continue
-    
-    if isStockInDB(code):
-        thisPrice = pack_price(stock)
-        stockCollec.update({'code': code}, {'$push': {
-            'history': {
-                '$each': [copy.deepcopy(thisPrice)],
-                '$sort': {'date': 1}
-            }}})
+        if len(vol_5_ma) == 1:
+            vol_5_ma = vol_5_ma[0]
+            self.stockCollec.update({'code': code}, {'$push': {
+                'volumn_5_ma': vol_5_ma
+            }})
 
-        updateMA(code)
-    else:
-        thisStock = {'code': code, 'history': [pack_price(stock)]}
-        stockCollec.insert_one(copy.deepcopy(thisStock))
+    def start(self):
+        # request and get stock price data, store in price_obj
+        # get today data
+        res = requests.get(url)
+        dayObj = json.loads(res.text)
+        price_obj = dayObj['data']
 
-    # add total
-    total += 1
+        # pp.pprint(price_obj)
 
-print(f'Total update: {total}')
+        # get all market code from DB
+        market_code = self.codeCollect.find_one({})['marketCode']
+
+        # total stock update
+        total = 0
+
+        # loop through all stock price today and save to DB
+        for i, stock in enumerate(price_obj):
+            code = stock[0].rstrip()
+
+            # exclude ETF
+            if code not in market_code: continue
+
+            if self.isStockInDB(code):
+                thisPrice = self.pack_price(stock, dayObj['date'])
+                self.stockCollec.update({'code': code}, {'$push': {
+                    'history': {
+                        '$each': [copy.deepcopy(thisPrice)],
+                        '$sort': {'date': 1}
+                    }}})
+
+                self.updateMA(code)
+            else:
+                thisStock = {'code': code, 'history': [self.pack_price(stock)]}
+                self.stockCollec.insert_one(copy.deepcopy(thisStock))
+
+            # add total
+            total += 1
+
+        print(f'Total update: {total}')
+
+if __name__ == '__main__':
+    # mlab_link = os.environ['mlab_db_link']
+    crawler = MarketCrawler()
+    crawler.start()
 
 
 

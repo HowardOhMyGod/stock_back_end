@@ -120,6 +120,7 @@ start完後內部資料:
 pass_company: list of stock dict (符合特徵之股票代碼，名稱，當日收盤價)
 lost_company: list of stock code (有缺少資料之股票代碼)
 '''
+
 class CheckStarter:
     def __init__(self, options = None, db_link = 'mongodb://localhost:27017/'):
         self.pass_company = []
