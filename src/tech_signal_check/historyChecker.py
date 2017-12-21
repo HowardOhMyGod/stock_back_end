@@ -63,12 +63,9 @@ class HisChecker:
 
 
 
-        first = abs(mv_list[1][-1] - mv_list[0][-1])  # 10MA - 5MA******
-        second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10 days 10MA - 5MA*****
-        third = abs(mv_list[1][-day] - mv_list[2][-day])  # 10 days 10MA - 20MA*****
-        # forth = abs(mv_list[0][-5] - mv_list[1][-5])  # 5MA - 10MA
-        # five = abs(mv_list[0][-7] - mv_list[1][-7])
-        # six = abs(mv_list[0][-3] - mv_list[1][-3])
+        first = abs(mv_list[1][-1] - mv_list[0][-1])  # today 10MA - 5MA
+        second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10 days 10MA - 5MA
+        third = abs(mv_list[1][-day] - mv_list[2][-day])  # 10 days 10MA - 20MA
 
         return (first <= cond and second <= cond
                 and third <= cond)
@@ -177,7 +174,7 @@ class HisStarter:
         history_collect = self.__db['history']
 
         # 設定風險標的
-        self.risk_level = options['risk_level']
+        self.options = options
         risk_groups = self.get_risk_codes()
 
         # 取得風險標的資料
@@ -207,9 +204,9 @@ class HisStarter:
     def get_risk_codes(self):
         risk_group = 'mid_risk_group'
 
-        if self.risk_level == 'High':
+        if self.options['risk_level'] == 'High':
             risk_group = 'high_risk_group'
-        elif self.risk_level == 'Low':
+        elif self.options['risk_level'] == 'Low':
             risk_group = 'low_risk_group'
 
         return self.__db['code'].find_one()[risk_group]
@@ -217,7 +214,7 @@ class HisStarter:
     def start(self):
         print('HisStarter start!')
         for stock in self.stocks:
-            checker = HisChecker(stock, self.result_index)
+            checker = HisChecker(stock, self.result_index, self.options)
             checker.start()
 
             if len(checker.collect) > 0:

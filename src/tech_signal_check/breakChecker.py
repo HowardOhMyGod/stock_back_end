@@ -10,18 +10,21 @@ import os
 回傳值: True or False
 '''
 class TechChecker:
-    def __init__(self, stock, options = None):
+    def __init__(self, stock, back_days = 1, options = None):
         # 取得該股最近一天的交易資訊
-        self.latest_prcie = stock['history'][-1]
+        self.latest_prcie = stock['history'][-back_days]
 
         # 取得該股MA
         self.MA = stock['MA']
 
         # 取得該股vlolumn_5MA
-        self.today_volumn_5ma = stock['volumn_5_ma'][-1]
+        self.today_volumn_5ma = stock['volumn_5_ma'][-back_days]
 
         # 使用者選擇的options
         self.user_opt = options
+
+        # 檢測前n天的資料: 1 = 前一天， 2 = 前兩天
+        self.back_days = back_days
 
         # 預設的篩選條件
         self.options = {
@@ -29,7 +32,8 @@ class TechChecker:
             'up_size': 0,
             'sticky_days': 10,
             'volumn_big': 2,
-            'volumn_size': 500
+            'volumn_size': 500,
+            'risk_group': 'Mid'
         }
 
         # 取得指定天數的5, 10, 20 MA, 格式: tuple(5_ma[back_days], 10_ma[back_days], 20_ma[back_days])
@@ -46,10 +50,16 @@ class TechChecker:
     '''取得近期特定天數的MA tuple'''
     def get_ma_list(self, MA):
         day = self.options['sticky_days']
+        back_days = self.back_days - 1
 
-        mv_5_3d = MA['MA_5'][-day:]
-        mv_10_3d = MA['MA_10'][-day:]
-        mv_20_3d = MA['MA_20'][-day:]
+        if back_days != 0:
+            mv_5_3d = MA['MA_5'][-day - back_days: -back_days]
+            mv_10_3d = MA['MA_10'][-day - back_days : -back_days]
+            mv_20_3d = MA['MA_20'][-day - back_days: -back_days]
+        else:
+            mv_5_3d = MA['MA_5'][-day:]
+            mv_10_3d = MA['MA_10'][-day:]
+            mv_20_3d = MA['MA_20'][-day:]
 
         #  檢查該股資料有沒有齊全，沒有回傳None，主程式會跳過此股
         if len(mv_5_3d) != day or len(mv_10_3d) != day or len(mv_20_3d) != day:
@@ -58,18 +68,15 @@ class TechChecker:
         return (mv_5_3d, mv_10_3d, mv_20_3d)
 
     '''檢查糾結: input: MA list, 三日的MA差距'''
-    def is_sticky(self, mv_list, cond_1=1, cond_2=1, cond_3=1, cond_4 = 1):
+    def is_sticky(self, mv_list, cond = 0.5):
         day = self.options['sticky_days']
 
-        first = abs(mv_list[1][-1] - mv_list[0][-1])  # 10MA - 5MA
-        second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10MA - 5MA
-        third = abs(mv_list[1][-day] - mv_list[2][-day])  # 10MA - 5MA
-        forth = abs(mv_list[0][-5] - mv_list[1][-5])  # 5MA - 10MA
-        five = abs(mv_list[0][-7] - mv_list[1][-7])
-        six = abs(mv_list[0][-3] - mv_list[1][-3])
+        first = abs(mv_list[1][-1] - mv_list[0][-1])  # today 10MA - 5MA
+        second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10 days 10MA - 5MA
+        third = abs(mv_list[1][-day] - mv_list[2][-day])  # 10 days 10MA - 20MA
 
-        return (first <= cond_1 and second <= cond_2
-                and third <= cond_3 and forth <= cond_4 and five <= 1 and six <= 1)
+        return (first <= cond and second <= cond
+                and third <= cond )
 
     '''K棒大小: close/open -1'''
     def is_k_size(self, latest_price):
@@ -123,32 +130,52 @@ lost_company: list of stock code (有缺少資料之股票代碼)
 '''
 
 class CheckStarter:
-    def __init__(self, options = None):
+    def __init__(self, back_days = 5, options = None):
         self.pass_company = []
         self.lost_company = []
 
         db_link = os.environ['local_db']
+
+        self.__db = MongoClient(db_link)['Stock']
         # get price collections
-        priceCollect = MongoClient(db_link)['Stock']['price']
+        priceCollect = self.__db['price']
 
-        # get all stock document in price
-        self.__stocks = priceCollect.find({})
-
-        # user input options, pass to TechChecker
+        # 設定風險標的
         self.options = options
+        risk_groups = self.get_risk_codes()
+
+        # 取得風險標的資料
+        self.__stocks = priceCollect.find({'code': {
+            '$in': risk_groups
+        }})
+
+        self.back_days = back_days
+
+    def get_risk_codes(self):
+        risk_group = 'mid_risk_group'
+
+        if self.options['risk_level'] == 'High':
+            risk_group = 'high_risk_group'
+        elif self.options['risk_level'] == 'Low':
+            risk_group = 'low_risk_group'
+
+        return self.__db['code'].find_one()[risk_group]
 
     def start(self):
         for stock in self.__stocks:
             try:
-                stock_check = TechChecker(stock, self.options)
+                # 檢查前10天內有無符合特徵的股票
+                for back_day in range(1, self.back_days):
+                    stock_check = TechChecker(stock, back_day, self.options)
 
-                # add stock code, name, close_price as dict to pass list
-                if stock_check.is_break():
-                    self.pass_company.append({
-                        'name': stock['name'],
-                        'code': stock['code'],
-                        'today_close_price': stock_check.latest_prcie['close']
-                    })
+                    # add stock code, name, close_price as dict to pass list
+                    if stock_check.is_break():
+                        self.pass_company.append({
+                            'name': stock['name'],
+                            'code': stock['code'],
+                            'date': stock_check.latest_prcie['date'].strftime("%Y/%m/%d"),
+                            'today_close_price': stock_check.latest_prcie['close']
+                        })
 
             except Exception as e:
                 # print(e)
@@ -158,7 +185,7 @@ class CheckStarter:
         self.__stocks.close()
 
 if __name__ == '__main__':
-    checker = CheckStarter({'k_size': 0.06})
+    checker = CheckStarter(options={'k_size': 0.07, 'risk_level': 'High'})
     checker.start()
 
     print(f"Pass Company: {checker.pass_company}")
