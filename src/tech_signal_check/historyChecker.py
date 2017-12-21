@@ -3,16 +3,8 @@ from pymongo import MongoClient
 import pprint
 import os
 
-total_rate = 0
-trade_num = 0
-win = 0
-pos_rate = 0
-pos_num = 0
-na_rate = 0
-na_num = 0
-
 class HisChecker:
-    def __init__(self, stock, options = None):
+    def __init__(self, stock, result_index, options = None):
         # 取得在該股歷史資料中，第20天(包含)之後的資料
         self.test_days = stock['history'][19:]
 
@@ -25,6 +17,10 @@ class HisChecker:
         # 使用者選擇的options
         self.user_opt = options
 
+        # 策略衡量總指標
+        self.result_index = result_index
+
+        # 所有股票進出場明細
         self.collect = []
 
         # 預設的篩選條件
@@ -33,7 +29,8 @@ class HisChecker:
             'up_size': 0,
             'sticky_days': 10,
             'volumn_big': 2,
-            'volumn_size': 300
+            'volumn_size': 300,
+            'risk_level': 'Mid'
         }
 
     '''設定篩選參數，如果self.user_opt不為None，將self.options更新為使用者的設定'''
@@ -121,10 +118,6 @@ class HisChecker:
                 self.is_up_5ma(ma_list))
 
     def start(self):
-        global total_rate
-        global trade_num
-        global win, pos_rate, pos_num, na_rate, na_num
-
         # 設定options
         self.set_options()
         buy = False
@@ -136,52 +129,108 @@ class HisChecker:
             # 缺少MA資料，跳過該日
             if ma_list is None: continue
 
+            # 進場
             if self.should_buy(latest_price, ma_list, self.volumn_5ma[day]) and not buy:
                 a_trade['buy'] = latest_price
                 a_trade['ma'] = [ma_list[0][-1], ma_list[1][-1], ma_list[2][-1]]
                 buy = True
 
+            # 出場
             elif self.should_sell(latest_price, ma_list[1][-1]) and buy:
                 a_trade['sell'] = latest_price
                 a_trade['return_rate'] = (a_trade['sell']['close'] - a_trade['buy']['close'])/ a_trade['sell']['close']
-                total_rate += a_trade['return_rate']
-                trade_num += 1
 
+                # update index_result
+                self.result_index['total_rate'] += a_trade['return_rate']
+                self.result_index['trade_num'] += 1
+
+                # 計算持有天數
+                holding_days = a_trade['sell']['date'] - a_trade['buy']['date']
+                self.result_index['holding_days'] += holding_days.days
+
+                # 計算正報酬次數、累積正報酬
                 if a_trade['return_rate'] > 0:
-                    pos_rate += a_trade['return_rate']
-                    pos_num += 1
-                    win += 1
+                    self.result_index['pos_rate'] += a_trade['return_rate']
+                    self.result_index['pos_num'] += 1
+
+                    # 最大正報酬率
+                    if a_trade['return_rate'] > self.result_index['max_pos_rate']:
+                        self.result_index['max_pos_rate'] = a_trade['return_rate']
+
+                # 計算負報酬次數、累積負報酬
                 else:
-                    na_rate += a_trade['return_rate']
-                    na_num += 1
+                    self.result_index['na_rate'] += a_trade['return_rate']
+                    self.result_index['na_num'] += 1
+
+                    # 最小負報酬率
+                    if a_trade['return_rate'] < self.result_index['min_na_rate']:
+                        self.result_index['min_na_rate'] = a_trade['return_rate']
 
                 buy = False
                 self.collect.append(a_trade)
 
 
+class HisStarter:
+    def __init__(self, options = None):
+        client = MongoClient(os.environ['local_db'])
+        self.__db = client['Stock']
+        history_collect = self.__db['history']
 
+        # 設定風險標的
+        self.risk_level = options['risk_level']
+        risk_groups = self.get_risk_codes()
+
+        # 取得風險標的資料
+        self.stocks = history_collect.find({'code' : {
+            '$in': risk_groups
+        }})
+
+        # 策略結果指標
+        self.result_index = {
+            'total_rate': 0, # 總累積報酬率
+            'trade_num': 0,  # 總交易次數
+            'pos_rate': 0,   # 累積正報酬率
+            'pos_num': 0,    # 累積正報酬次數
+            'na_rate': 0,    # 累積負報酬率
+            'na_num': 0,      # 累積負報酬次數
+            'max_pos_rate': 0, # 最大正報酬
+            'min_na_rate': 1,   # 最小負報酬率
+            'holding_days': 0,     # 總持有天數
+            'avg_rate': None,
+            'avg_hold_days': None,
+            'win_rate': None
+        }
+
+        # 交易資料
+        self.trade_data = {}
+
+    def get_risk_codes(self):
+        risk_group = 'mid_risk_group'
+
+        if self.risk_level == 'High':
+            risk_group = 'high_risk_group'
+        elif self.risk_level == 'Low':
+            risk_group = 'low_risk_group'
+
+        return self.__db['code'].find_one()[risk_group]
+
+    def start(self):
+        print('HisStarter start!')
+        for stock in self.stocks:
+            checker = HisChecker(stock, self.result_index)
+            checker.start()
+
+            if len(checker.collect) > 0:
+                self.trade_data[checker.code] = checker.collect
+
+        # 計算平均指標
+        self.result_index['win_rate'] = self.result_index['pos_num'] / self.result_index['trade_num']
+        self.result_index['avg_hold_days'] = self.result_index['holding_days'] / self.result_index['trade_num']
+        self.result_index['avg_rate'] = self.result_index['total_rate'] / self.result_index['trade_num']
 
 if __name__ == '__main__':
+    his_starter = HisStarter({'risk_level': 'High'})
+    his_starter.start()
+
     pp = pprint.PrettyPrinter(indent=4)
-    local_db = os.environ['local_db']
-    client = MongoClient(local_db)
-
-    history_collect = client['Stock']['history']
-
-    stocks = history_collect.find({})
-    result = {}
-    for i, stock in enumerate(stocks):
-        checker = HisChecker(stock)
-        checker.start()
-
-        if len(checker.collect) > 0:
-            result[checker.code] = checker.collect
-
-    print(f'Average Return: {total_rate / trade_num}')
-    print(f'AVP: {pos_rate / pos_num}')
-    print(f'AVN: {na_rate / na_num}')
-    print(f'Win rate: {win/ trade_num}')
-    print(f'Find {len(result.keys())} company pass')
-    print(f'total: {trade_num}')
-
-    pp.pprint(result['1235'])
+    pp.pprint(his_starter.result_index)
