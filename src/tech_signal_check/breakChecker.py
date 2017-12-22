@@ -2,7 +2,9 @@
 # coding: utf-8
 
 from pymongo import MongoClient
+from datetime import datetime
 import os
+
 
 '''
 功能: 檢查該股當日交易資料是否符合均線糾結，向上突破的特徵
@@ -32,6 +34,7 @@ class TechChecker:
             'up_size': 0,
             'sticky_days': 10,
             'volumn_big': 2,
+            'sticky_level': 0.5,
             'volumn_size': 500,
             'risk_group': 'Mid'
         }
@@ -68,8 +71,9 @@ class TechChecker:
         return (mv_5_3d, mv_10_3d, mv_20_3d)
 
     '''檢查糾結: input: MA list, 三日的MA差距'''
-    def is_sticky(self, mv_list, cond = 0.5):
+    def is_sticky(self, mv_list):
         day = self.options['sticky_days']
+        cond = self.options['sticky_level']
 
         first = abs(mv_list[1][-1] - mv_list[0][-1])  # today 10MA - 5MA
         second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10 days 10MA - 5MA
@@ -183,9 +187,11 @@ class CheckStarter:
 
         # close cursor
         self.__stocks.close()
-
+        self.pass_company = sorted(self.pass_company,
+                                      key=lambda stock: datetime.strptime(stock['date'], "%Y/%m/%d"),
+                                      reverse = True)
 if __name__ == '__main__':
-    checker = CheckStarter(options={'k_size': 0.07, 'risk_level': 'High'})
+    checker = CheckStarter(options={'k_size': 0.07, 'risk_level': 'Mid'})
     checker.start()
 
     print(f"Pass Company: {checker.pass_company}")

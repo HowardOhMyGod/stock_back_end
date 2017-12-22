@@ -28,6 +28,7 @@ class HisChecker:
             'k_size': 0.07,
             'up_size': 0,
             'sticky_days': 10,
+            'sticky_level': 0.5,
             'volumn_big': 2,
             'volumn_size': 300,
             'risk_level': 'Mid'
@@ -42,26 +43,28 @@ class HisChecker:
                 if option in self.options and value is not None:
                     self.options[option] = value
 
-    '''取得待測日起為止的前10天MA資料'''
+    '''取得待測日起為止的前sticky_day天MA資料'''
     def get_ma_list(self, MA, day):
         today_5 = 15 + day
         today_10 = 10 + day
         today_20 = day
 
-        mv_5_list = MA['MA_5'][today_5 - 10:today_5]
-        mv_10_list = MA['MA_10'][today_10 - 10:today_10]
-        mv_20_list = MA['MA_20'][today_20 - 10:today_20]
+        # 前N天
+        sticky_day = self.options['sticky_days']
 
-        if len(mv_5_list) != 10 or len(mv_10_list) != 10 or len(mv_20_list) != 10:
+        mv_5_list = MA['MA_5'][today_5 - sticky_day:today_5]
+        mv_10_list = MA['MA_10'][today_10 - sticky_day:today_10]
+        mv_20_list = MA['MA_20'][today_20 - sticky_day:today_20]
+
+        if len(mv_5_list) != sticky_day or len(mv_10_list) != sticky_day or len(mv_20_list) != sticky_day:
             return None
 
         return (mv_5_list, mv_10_list, mv_20_list)
 
     '''檢查糾結: input: MA list, 三日的MA差距'''
-    def is_sticky(self, mv_list, cond = 0.5):
+    def is_sticky(self, mv_list):
         day = self.options['sticky_days']
-
-
+        cond = self.options['sticky_level']
 
         first = abs(mv_list[1][-1] - mv_list[0][-1])  # today 10MA - 5MA
         second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10 days 10MA - 5MA
@@ -226,7 +229,7 @@ class HisStarter:
         self.result_index['avg_rate'] = self.result_index['total_rate'] / self.result_index['trade_num']
 
 if __name__ == '__main__':
-    his_starter = HisStarter({'risk_level': 'High'})
+    his_starter = HisStarter({'risk_level': 'Mid'})
     his_starter.start()
 
     pp = pprint.PrettyPrinter(indent=4)
