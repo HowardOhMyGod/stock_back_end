@@ -4,6 +4,7 @@ from flask_restful import Resource, Api, reqparse, abort
 
 from tech_signal_check.breakChecker import CheckStarter
 from tech_signal_check.historyChecker import HisStarter
+from basic.basicFilter import BasicFilter
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
@@ -50,8 +51,21 @@ class BreakChecker(Resource):
                 'pass_company': pass_company,
                 'his_index': result_index}
 
+class Basic(Resource):
+    def post(self):
+        # 取得post payload
+        args = parser.parse_args()
+        risk_level = args['risk_level']
+
+        # 取得篩選結果
+        filter = BasicFilter(risk_level)
+        result = filter.pack_industry()
+
+        return result
 
 api.add_resource(BreakChecker, '/breakcheck')
+api.add_resource(Basic, '/basic')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0 ')
+    # host = '0.0.0.0'
+    app.run(debug=True)

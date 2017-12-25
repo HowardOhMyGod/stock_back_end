@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+from datetime import datetime
 import os
 import pprint
 
@@ -7,7 +8,10 @@ class BasicFilter:
         # db config
         client = MongoClient(os.environ['local_db'])
         db = client['Stock']
+
+        # get collections
         self.basic_collect = db['basic']
+        self.price_collect = db['price']
 
         # convert risk level
         self.risk_level = risk_level
@@ -27,11 +31,24 @@ class BasicFilter:
             return '2'
         elif self.risk_level == 'High':
             return '3'
+    @staticmethod
+    def get_today_price(self, code):
+        this_stock = self.price_collect.find_one({
+            'code': code
+        })
+
+        close_price = this_stock['history'][-1]['close']
+        today_date = this_stock['history'][-1]['date'].strftime("%Y/%m/%d")
+
+        return close_price, today_date
+
 
     def pack_industry(self):
         all = {}
         for stock in self.stocks:
             type = stock['industry_type']
+            stock['close'], stock['date'] = self.get_today_price(self, stock['code'])
+
 
             if type in all:
                 all[type].append(stock)
