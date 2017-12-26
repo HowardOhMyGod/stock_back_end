@@ -71,6 +71,9 @@ class MarketCrawler:
         if latest_save_date == datetime.strptime(time.strftime(time_format), time_format):
             raise DateError(f"{latest_save_date}'s data has been saved!")
 
+        # 更新總比數
+        self.total = 0
+
     # check if stock already in DB
     def isStockInDB(self, code):
         return self.stockCollec.find({'code': code}).count() > 0
@@ -144,9 +147,6 @@ class MarketCrawler:
         # get all market code from DB
         market_code = self.codeCollect.find_one({})['marketCode']
 
-        # total stock update
-        total = 0
-
         # loop through all stock price today and save to DB
         for i, stock in enumerate(price_obj):
             code = stock[0].rstrip()
@@ -163,19 +163,20 @@ class MarketCrawler:
                     }}})
 
                 self.updateMA(code)
+
+                # add total
+                self.total += 1
             else:
                 thisStock = {'code': code, 'history': [self.pack_price(stock)]}
                 self.stockCollec.insert_one(copy.deepcopy(thisStock))
 
-            # add total
-            total += 1
 
-        print(f'Total update: {total}')
 
 if __name__ == '__main__':
     # mlab_link = os.environ['mlab_db_link']
     crawler = MarketCrawler()
     crawler.start()
+    print(f'Total update: {crawler.total}')
 
 
 

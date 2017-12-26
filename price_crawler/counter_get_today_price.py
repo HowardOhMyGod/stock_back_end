@@ -61,11 +61,14 @@ class CounterCrawler:
         latest_save_date = self.priceCollect.find_one({'code': '1258'})['history'][-1]['date']
 
         # if saved, raise Error
-        # if latest_save_date == datetime.strptime(time.strftime(time_format), time_format):
-        #     raise DateError(f"{latest_save_date}'s data has been saved!")
+        if latest_save_date == datetime.strptime(time.strftime(time_format), time_format):
+            raise DateError(f"{latest_save_date}'s data has been saved!")
 
         # 取得所有已存在DB的上櫃公司代碼
         self.all_code = self.codeCollect.find_one({})['counterCode']
+
+        # 新增比數
+        self.total = 0
 
     # 打包當日開高低收與交易張數
     def pack_price(self, a_day):
@@ -157,7 +160,6 @@ class CounterCrawler:
 
     # 擷取股價主程式
     def start(self):
-        total = 0
 
         for code in self.all_code:
             url = f'http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=106/12&stkno={code}&_=1513094300431'
@@ -188,6 +190,8 @@ class CounterCrawler:
 
                 # history 加入最近一日股價後，更新MA
                 self.updateMA(code)
+                self.total += 1
+
             # 該股不存在DB
             else:
                 print(f"{code} not exist!")
@@ -195,11 +199,9 @@ class CounterCrawler:
                 # 新增該股的document並寫入
                 thisStock = {'code': code, 'history': [a_day_price]}
                 self.priceCollect.insert_one(thisStock)
-            print('insert!')
-            total += 1
 
-        print(f'Total update: {total}')
 
 if __name__ == '__main__':
     crawler = CounterCrawler()
     crawler.start()
+    print('Total update: ', crawler.total)
