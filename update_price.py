@@ -49,16 +49,28 @@ class PriceUpdater:
 
 
 if __name__ == '__main__':
+    err_msg = None
     # 更新股
-    p_updater = PriceUpdater()
-    market_count, counter_count = p_updater.run()
+    try:
+        p_updater = PriceUpdater()
+        market_count, counter_count = p_updater.run()
+    except Exception as e:
+        err_msg = str(e)
+
+
 
     # 寄出Email
     for user in ['howard036060006@gmail.com', 'andy566159@gmail.com']:
         email = Email(user)
-        email.send({
-            "subject": f'{datetime.today().strftime("%Y/%m/%d")} Price Update!',
-            "body": f'Market update: {market_count}, counter update: {counter_count}'
-        })
+        if err_msg is None:
+            email.send({
+                "subject": f'{datetime.today().strftime("%Y/%m/%d")} Price Update!',
+                "body": f'Market update: {market_count}, counter update: {counter_count}'
+            })
+        else:
+            email.send({
+                "subject": f'{datetime.today().strftime("%Y/%m/%d")} Price Update!',
+                "body": f'Error occur: {err_msg}'
+            })
 
     print("Email sent!")

@@ -1,10 +1,12 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from flask_restful import Resource, Api, reqparse, abort
 
 from tech_signal_check.breakChecker import CheckStarter
 from tech_signal_check.historyChecker import HisStarter
 from basic.basicFilter import BasicFilter
+
+from price.price import Price
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
@@ -50,7 +52,9 @@ class BreakChecker(Resource):
                 'pass_count': len(pass_company),
                 'pass_company': pass_company,
                 'his_index': result_index}
-
+'''
+依照風險等級回傳基本面分析標的
+'''
 class Basic(Resource):
     def post(self):
         # 取得post payload
@@ -62,10 +66,36 @@ class Basic(Resource):
         result = filter.pack_industry()
 
         return result
+'''
+回傳highchart 所需繪圖資料
+'''
 
+class Draw(Resource):
+    def get(self):
+        args = request.args
+        print(args['code'])
+        code = args['code']
+
+        try:
+            p = Price(code)
+        except Exception as e:
+            return {
+                'error': True,
+                'msg': str(e)
+                   }, 404
+
+        data = p.return_price()
+
+        return {
+            'code': code,
+            'history': data
+        }
+
+# 設定路由
 api.add_resource(BreakChecker, '/breakcheck')
 api.add_resource(Basic, '/basic')
+api.add_resource(Draw, '/draw')
 
 if __name__ == '__main__':
-    # host = '0.0.0.0'
-    app.run(host='0.0.0.0')
+    host = '0.0.0.0'
+    app.run(host=host)

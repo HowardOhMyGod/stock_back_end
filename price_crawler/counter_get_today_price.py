@@ -160,9 +160,17 @@ class CounterCrawler:
 
     # 擷取股價主程式
     def start(self):
+        def get_year_month():
+            year = datetime.strftime(datetime.now(),"%Y")
+            month = datetime.strftime(datetime.now(),"%m")
+            year = int(year) - 1911
+
+            return year, month
+
+        year, month = get_year_month()
 
         for code in self.all_code:
-            url = f'http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=106/12&stkno={code}&_=1513094300431'
+            url = f'http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d={year}/{month}&stkno={code}&_=1513094300431'
             res = requests.get(url)
             print(code)
 
@@ -170,7 +178,11 @@ class CounterCrawler:
             monthPrice = json.loads(res.text)['aaData']
 
             # 選取最新一天的股價
-            today_price = monthPrice[-1]
+            try:
+                today_price = monthPrice[-1]
+            except:
+                print(f"{code}: no price.")
+                continue
 
             # 打包成DB 格式
             a_day_price = self.pack_price(today_price)
