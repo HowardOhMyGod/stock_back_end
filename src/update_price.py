@@ -4,8 +4,8 @@ import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
 
-from price_crawler.counter_get_today_price import CounterCrawler
-from price_crawler.market_get_today_price import MarketCrawler
+from counter_get_today_price import CounterCrawler
+from market_get_today_price import MarketCrawler
 
 
 '''Email sender'''
