@@ -142,6 +142,10 @@ class CounterCrawler(PriceCrawler):
             # 更新此股價格，同事會更新5MA 10MA 20MA，交易量5MA
             super().update_price(code, today_price)
 
+        # close the collection cursors
+        self.price_clt.close()
+        self.code_clt.close()
+
 
 if __name__ == '__main__':
     crawler = CounterCrawler()

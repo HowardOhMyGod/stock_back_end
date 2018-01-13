@@ -1,21 +1,18 @@
 
-from pymongo import MongoClient
+from checker import BaseChecker, BaseStarter
 import pprint
-import os
 
-class HisChecker:
+class HisChecker(BaseChecker):
     def __init__(self, stock, result_index, options = None):
+        super().__init__(stock, options=options)
+
         # 取得在該股歷史資料中，第20天(包含)之後的資料
         self.test_days = stock['history'][19:]
 
-        self.MA = stock['MA']
         self.code = stock['code']
 
         # 取得在該股歷史資料中，第20天(包含)之後的volumn_5_ma
         self.volumn_5ma = stock['volumn_5_ma'][14:]
-
-        # 使用者選擇的options
-        self.user_opt = options
 
         # 策略衡量總指標
         self.result_index = result_index
@@ -23,25 +20,6 @@ class HisChecker:
         # 所有股票進出場明細
         self.collect = []
 
-        # 預設的篩選條件
-        self.options = {
-            'k_size': 0.07,
-            'up_size': 0,
-            'sticky_days': 10,
-            'sticky_level': 0.5,
-            'volumn_big': 2,
-            'volumn_size': 300,
-            'risk_level': 'Mid'
-        }
-
-    '''設定篩選參數，如果self.user_opt不為None，將self.options更新為使用者的設定'''
-    def set_options(self):
-        if self.user_opt is None:
-            return
-        else:
-            for option, value in self.user_opt.items():
-                if option in self.options and value is not None:
-                    self.options[option] = value
 
     '''取得待測日起為止的前sticky_day天MA資料'''
     def get_ma_list(self, MA, day):
@@ -60,46 +38,6 @@ class HisChecker:
             return None
 
         return (mv_5_list, mv_10_list, mv_20_list)
-
-    '''檢查糾結: input: MA list, 三日的MA差距'''
-    def is_sticky(self, mv_list):
-        day = self.options['sticky_days']
-        cond = self.options['sticky_level']
-
-        first = abs(mv_list[1][-1] - mv_list[0][-1])  # today 10MA - 5MA
-        second = abs(mv_list[1][-day] - mv_list[0][-day])  # 10 days 10MA - 5MA
-        third = abs(mv_list[1][-day] - mv_list[2][-day])  # 10 days 10MA - 20MA
-
-        return (first <= cond and second <= cond
-                and third <= cond)
-
-    '''K棒大小: close/open -1'''
-    def is_k_size(self, latest_price):
-        size = self.options['k_size']
-
-        return ((latest_price['close'] / latest_price['open']) - 1) >= size
-
-    '''高價與收盤價距離'''
-    def is_HC_range(self, latest_prcie):
-        dis = self.options['up_size']
-
-        return latest_prcie['high'] - latest_prcie['close'] <= dis
-
-    '''成交量大小範圍'''
-    def is_volumn(self, volumn, today_vol_5ma):
-        bigger_than = self.options['volumn_big']
-        bigger_size = self.options['volumn_size']
-
-        return (volumn / today_vol_5ma >= bigger_than and
-                volumn >= bigger_size)
-
-    '''收盤大於5MA'''
-    def is_close_big_than_5MA(self, latest_prcie, today_5MA):
-        return latest_prcie['close'] > today_5MA
-
-    '''檢查上彎5MA'''
-    def is_up_5ma(self, ma_list):
-        return ma_list[0][-1] > ma_list[0][-2]
 
     '''出場'''
     def should_sell(self, latest_price, today_ma_20):
@@ -170,20 +108,11 @@ class HisChecker:
                 self.collect.append(a_trade)
 
 
-class HisStarter:
+class HisStarter(BaseStarter):
     def __init__(self, options = None):
-        client = MongoClient(os.environ['local_db'])
-        self.__db = client['Stock']
-        history_collect = self.__db['history']
+        super().__init__(options = options)
 
-        # 設定風險標的
-        self.options = options
-        risk_groups = self.get_risk_codes()
-
-        # 取得風險標的資料
-        self.stocks = history_collect.find({'code' : {
-            '$in': risk_groups
-        }})
+        self.stocks = super().get_risk_level_stock(self.db['history'])
 
         # 策略結果指標
         self.result_index = {
@@ -203,16 +132,6 @@ class HisStarter:
 
         # 交易資料
         self.trade_data = {}
-
-    def get_risk_codes(self):
-        risk_group = 'mid_risk_group'
-
-        if self.options['risk_level'] == 'High':
-            risk_group = 'high_risk_group'
-        elif self.options['risk_level'] == 'Low':
-            risk_group = 'low_risk_group'
-
-        return self.__db['code'].find_one()[risk_group]
 
     def start(self):
         print('HisStarter start!')

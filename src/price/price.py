@@ -1,6 +1,9 @@
 from pymongo import MongoClient
+from mymodule.module import load_module
 import os
 import pprint
+
+mongodb = load_module(os.path.dirname(__name__), '../db', 'mongodb')
 
 class dbError(Exception):
     pass
@@ -15,8 +18,8 @@ class Price:
         self.code = code
 
         # db config
-        client = MongoClient(os.environ['local_db'])
-        db = client['Stock']
+        db = mongodb.Mongo.connect('Stock')
+
         self.__price_collect = db['price']
 
         if self.code_in_db():

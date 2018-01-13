@@ -85,6 +85,9 @@ class MarketCrawler(PriceCrawler):
 
             super().update_price(code, today_price)
 
+        # close the collection cursors
+        self.price_clt.close()
+        self.code_clt.close()
 
 if __name__ == '__main__':
     crawler = MarketCrawler()
